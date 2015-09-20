@@ -50,23 +50,38 @@
   [user repo & [options]]
   (api-call :get "repos/%s/%s/issues" [user repo] (join-labels options)))
 
+(defn org-issues
+  "List all issues for a given organization for (authenticated) user.
+   Options are:
+     filter    -- assigned: assigned to you,
+                  created: created by you,
+                  mentioned: issues that mention you,
+                  subscribed: issues that you're subscribed to.
+     state     -- open (default), closed.
+     labels    -- A string of comma-separated label names.
+     sort      -- created (default), updated, comments.
+     direction -- asc: ascending,
+                  desc (default): descending.
+     since     -- String ISO 8601 timestamp."
+  [org & [options]]
+  (api-call :get "orgs/%s/issues" [org] (join-labels options)))
+
 (defn specific-issue
   "Fetch a specific issue."
   [user repo number & [options]]
   (api-call :get "repos/%s/%s/issues/%s" [user repo number] options))
 
 (defn create-issue
-  [user repo title options]
   "Create an issue.
    Options are:
      milestone -- Milestone number to associate with this issue..
      assignee  -- A username to assign to this issue.
      labels    -- A list of labels to associate with this issue.
      body      -- The body text of the issue."
+  [user repo title options]
   (api-call :post "repos/%s/%s/issues" [user repo] (assoc options :title title)))
 
 (defn edit-issue
-  [user repo id options]
   "Edit an issue.
    Options are:
      milestone -- Milestone number to associate with this issue..
@@ -76,18 +91,24 @@
      state     -- open or closed.
      title     -- Title of the issue.
      body      -- The body text of the issue."
-  (api-call :post "repos/%s/%s/issues/%s" [user repo id] options))
+  [user repo id options]
+  (api-call :patch "repos/%s/%s/issues/%s" [user repo id] options))
 
 ;; ## Issue Comments API
 
+(defn repo-issue-comments
+  "List issue comments in a repository."
+  [user repo & [options]]
+  (api-call :get "repos/%s/%s/issues/comments" [user repo] options))
+
 (defn issue-comments
-  [user repo id & [options]]
   "List comments on an issue."
+  [user repo id & [options]]
   (api-call :get "repos/%s/%s/issues/%s/comments" [user repo id] options))
 
 (defn specific-comment
-  [user repo comment-id & [options]]
   "Get a specific comment."
+  [user repo comment-id & [options]]
   (api-call :get "repos/%s/%s/issues/comments/%s" [user repo comment-id] options))
 
 (defn create-comment
@@ -99,7 +120,7 @@
 (defn edit-comment
   "Edit a comment."
   [user repo comment-id body options]
-  (api-call :post "repos/%s/%s/issues/comments/%s"
+  (api-call :patch "repos/%s/%s/issues/comments/%s"
             [user repo comment-id] (assoc options :body body)))
 
 (defn delete-comment
@@ -152,7 +173,7 @@
 (defn edit-label
   "Edit a label."
   [user repo id name color options]
-  (api-call :post "repos/%s/%s/labels/%s"
+  (api-call :patch "repos/%s/%s/labels/%s"
             [user repo id] (assoc options :name name :color color)))
 
 (defn delete-label
@@ -221,7 +242,7 @@
      description -- a description string.
      due-on      -- String ISO 8601 timestamp"
   [user repo id title options]
-  (api-call :post "repos/%s/%s/milestones/%s"
+  (api-call :patch "repos/%s/%s/milestones/%s"
             [user repo id] (assoc options :title title)))
 
 (defn delete-milestone

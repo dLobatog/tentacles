@@ -45,8 +45,7 @@
   (api-call :post "repos/%s/%s/git/commits" [user repo]
             (assoc options
               :message message
-              :tree tree
-              :parents parents)))
+              :tree tree)))
 
 ;; ## References
 
@@ -84,6 +83,11 @@
   "Get a tag."
   [user repo sha & [options]]
   (api-call :get "repos/%s/%s/git/tags/%s" [user repo sha] options))
+
+(defn tags
+  "Get several tags."
+  [user repo & [options]]
+  (api-call :get "repos/%s/%s/git/refs/tags" [user repo] options))
 
 ;; The API documentation is unclear about which parts of this API call
 ;; are optional.

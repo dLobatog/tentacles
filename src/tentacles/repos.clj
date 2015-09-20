@@ -79,7 +79,7 @@
       has-wiki      -- true, false.
       has-downloads -- true, false."
   [user repo options]
-  (api-call :post "repos/%s/%s"
+  (api-call :patch "repos/%s/%s"
             [user repo]
             (if (:name options)
               options
@@ -279,14 +279,6 @@
   (api-call :post "repos/%s/%s/keys" [user repo]
             (assoc options :title title :key key)))
 
-(defn edit-key
-  "Edit a deploy key.
-   Options are:
-      title -- New title.
-      key   -- New key."
-  [user repo id options]
-  (api-call :post "repos/%s/%s/keys/%s" [user repo id] options))
-
 (defn delete-key
   "Delete a deploy key."
   [user repo id options]
@@ -380,7 +372,7 @@
       active        -- true or false; determines if the hook is actually
                        triggered on pushes."
   [user repo id options]
-  (api-call :post "repos/%s/%s/hooks/%s" [user repo id] options))
+  (api-call :patch "repos/%s/%s/hooks/%s" [user repo id] options))
 
 (defn test-hook
   "Test a hook."
@@ -402,7 +394,7 @@
   [user repo mode event callback & [options]]
   (no-content?
    (post "https://api.github.com/hub"
-         (merge 
+         (merge
            (when-let [oauth-token (:oauth-token options)]
              {:headers {"Authorization" (str "token " oauth-token)}})
            {:basic-auth (:auth options)
@@ -422,15 +414,20 @@
   ([res str? path]
      (if (and (map? res) (= (:encoding res) "base64"))
        (if-let [^String encoded (get-in res path)]
-         (let [trimmed (.replace encoded "\n" "")
-               raw (.getBytes trimmed "UTF-8")
-               decoded (b64/decode raw)
-               done (if str? (String. decoded "UTF-8") decoded)]
-           (assoc-in res path done))
+         (if (not (empty? encoded))
+           (let [trimmed (.replace encoded "\n" "")
+                 raw (.getBytes trimmed "UTF-8")
+                 decoded (if (seq raw) (b64/decode raw) (byte-array))
+                 done (if str? (String. decoded "UTF-8") decoded)]
+             (assoc-in res path done))
+           res)
          res)
        res))
   ([res str?] (decode-b64 res str? [:content]))
   ([res] (decode-b64 res false [:content])))
+
+(defn encode-b64 [content]
+  (String. (b64/encode (.getBytes content "UTF-8")) "UTF-8"))
 
 (defn readme
   "Get the preferred README for a repository.
@@ -452,6 +449,23 @@
    (api-call :get "repos/%s/%s/contents/%s" [user repo path] (dissoc options :str?))
    str?))
 
+(defn update-contents
+  "Update a file in a repository
+   path -- The content path.
+   message -- The commit message.
+   content -- The updated file content, Base64 encoded.
+   sha -- The blob SHA of the file being replaced.
+   Options are:
+      branch -- The branch name. Default: the repository’s default branch (usually master)
+      name -- The name of the author (or committer) of the commit
+      email -- The email of the author (or committer) of the commit"
+  [user repo path message content sha & [options]]
+  (let [body (merge {:message message
+                     :content (encode-b64 content)
+                     :sha     sha}
+                    options)]
+    (api-call :put "repos/%s/%s/contents/%s" [user repo path] body)))
+
 (defn archive-link
   "Get a URL to download a tarball or zipball archive for a repository.
    Options are:
@@ -464,3 +478,114 @@
        (if (= (resp :status) 302)
          (get-in resp [:headers "location"])
          resp))))
+
+;; ## Status API
+(def combined-state-opt-in "application/vnd.github.she-hulk-preview+json")
+
+(defn statuses
+  "Returns the combined status of a ref (SHA, branch, or tag).
+  By default, returns the combined status. Include `:combined? false'
+  in options to disable combined status
+  (see https://developer.github.com/v3/repos/statuses/#get-the-combined-status-for-a-specific-ref)"
+  [user repo ref & [options]]
+  (let [combined? (:combined? options true)]
+    (api-call :get
+              (if combined?
+                "repos/%s/%s/commits/%s/status"
+                "repos/%s/%s/statuses/%s")
+              [user repo ref]
+              (cond-> options
+                      combined? (assoc :accept combined-state-opt-in)))))
+
+(defn create-status
+  "Creates a status.
+  Options are: state target-url description context; state is mandatory"
+  [user repo sha options]
+  (api-call :post "repos/%s/%s/statuses/%s" [user repo sha]
+            (assoc options
+              :accept combined-state-opt-in)))
+
+;; ## Deployments API
+(def deployments-opt-in "application/vnd.github.cannonball-preview+json")
+
+(defn deployments
+  "Returns deployments for a repo"
+  [user repo & [options]]
+  (api-call :get "repos/%s/%s/deployments" [user repo]
+            (assoc options
+              :accept deployments-opt-in)))
+
+(defn create-deployment
+  "Creates a deployment for a ref.
+  Options are: force, payload, auto-merge, description"
+  [user repo ref options]
+  (api-call :post "repos/%s/%s/deployments" [user repo]
+            (assoc options
+              :ref ref
+              :accept deployments-opt-in)))
+
+(defn deployment-statuses
+  "Returns deployment statuses for a deployment"
+  [user repo deployment options]
+  (api-call :get "repos/%s/%s/deployments/%s/statuses" [user repo deployment]
+            (assoc options
+              :accept deployments-opt-in)))
+
+(defn create-deployment-status
+  "Create a deployment status.
+  Options are: state (required), target-url, description"
+  [user repo deployment options]
+  (api-call :post "repos/%s/%s/deployments/%s/statuses" [user repo deployment]
+            (assoc options
+              :accept deployments-opt-in)))
+
+;; # Releases api
+
+(defn releases
+  "List releases for a repository."
+  [user repo]
+  (api-call :get "repos/%s/%s/releases" [user repo]))
+
+(defn specific-release
+  "Gets a specific release."
+  [user repo id & [options]]
+  (api-call :get "repos/%s/%s/releases/%s" [user repo id] options))
+
+
+(defn create-release
+  "Creates a release.
+   Options are: tag-name (required), target-commitish, name, body, draft, prerelease"
+  [user repo options]
+  (api-call :post "repos/%s/%s/releases" [user repo] options))
+
+(defn delete-release
+  "Deletes a release."
+  [user repo id & [options]]
+  (api-call :delete "repos/%s/%s/releases/%s" [user repo id] options))
+
+;; ## Statistics API
+
+(defn contributor-statistics
+  "List additions, deletions, and commit counts per contributor"
+  [user repo & [options]]
+  (api-call :get "repos/%s/%s/stats/contributors" [user repo] options))
+
+(defn commit-activity
+  "List weekly commit activiy for the past year"
+  [user repo & [options]]
+  (api-call :get "repos/%s/%s/stats/commit_activity" [user repo] options))
+
+(defn code-frequency
+  "List weekly additions and deletions"
+  [user repo & [options]]
+  (api-call :get "repos/%s/%s/stats/code_frequency" [user repo] options))
+
+(defn participation
+  "List weekly commit count grouped by the owner and all other users"
+  [user repo & [options]]
+  (api-call :get "repos/%s/%s/stats/participation" [user repo] options))
+
+(defn punch-card
+  "List commit count per hour in the day"
+  [user repo & [options]]
+  (api-call :get "repos/%s/%s/stats/punch_card" [user repo] options))

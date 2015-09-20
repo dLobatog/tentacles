@@ -3,6 +3,11 @@
   (:refer-clojure :exclude [keys])
   (:use [tentacles.core :only [api-call no-content?]]))
 
+(defn users
+  "Get info about all users."
+  [& [options]]
+  (api-call :get "users" nil options))
+
 (defn user
   "Get info about a user."
   [user & [options]]
@@ -23,7 +28,7 @@
       hireable -- Looking for a job?
       bio      -- User's biography."
   [options]
-  (api-call :post "user" nil options))
+  (api-call :patch "user" nil options))
 
 (defn emails
   "List the authenticated user's emails."
@@ -77,6 +82,11 @@
   [user options]
   (no-content? (api-call :delete "user/following/%s" [user] options)))
 
+(defn user-keys
+  "List the user's public keys."
+  [user & [options]]
+  (api-call :get "users/%s/keys" [user] options))
+
 (defn keys
   "List the authenticated user's public keys."
   [options]
@@ -92,15 +102,12 @@
   [title key options]
   (api-call :post "user/keys" nil (assoc options :title title :key key)))
 
-(defn edit-key
-  "Edit an existing public key.
-   Options are:
-      title -- New title.
-      key   -- New key."
-  [id options]
-  (api-call :post "user/keys/%s" [id] options))
-
 (defn delete-key
   "Delete a public key."
   [id options]
   (no-content? (api-call :delete "user/keys/%s" [id] options)))
+
+(defn my-teams
+  "List the currently authenticated user's teams across all organizations"
+  [& [options]]
+  (api-call :get "user/teams" nil options))

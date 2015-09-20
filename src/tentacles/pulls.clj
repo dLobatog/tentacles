@@ -41,7 +41,7 @@
       body  -- a new body.
       state -- open or closed."
   [user repo id options]
-  (api-call :post "repos/%s/%s/pulls/%s" [user repo id] options))
+  (api-call :patch "repos/%s/%s/pulls/%s" [user repo id] options))
 
 (defn commits
   "List the commits on a pull request."
@@ -66,6 +66,11 @@
   (api-call :put "repos/%s/%s/pulls/%s/merge" [user repo id] options))
 
 ;; ## Pull Request Comment API
+
+(defn repo-comments
+  "List pull request comments in a repository."
+  [user repo & [options]]
+  (api-call :get "repos/%s/%s/pulls/comments" [user repo] options))
 
 (defn comments
   "List comments on a pull request."
@@ -92,7 +97,7 @@
 (defn edit-comment
   "Edit a comment on a pull request."
   [user repo id body options]
-  (api-call :post "repos/%s/%s/pulls/comments/%s" [user repo id]
+  (api-call :patch "repos/%s/%s/pulls/comments/%s" [user repo id]
             (assoc options :body body)))
 
 (defn delete-comment

@@ -2,8 +2,7 @@
   (:require [clj-http.client :as http]
             [cheshire.core :as json]
             [clojure.string :as str]
-            [cemerick.url :as url])
-  (:import java.net.URLEncoder))
+            [cemerick.url :as url]))
 
 (def ^:dynamic url "https://api.github.com/")
 (def ^:dynamic defaults {})
@@ -51,6 +50,8 @@
    as json. Otherwise, parse and return the body if json, or return the body if raw."
   [{:keys [headers status body] :as resp}]
   (cond
+   (= 202 status)
+   ::accepted
    (= 304 status)
    ::not-modified
    (#{400 401 204 422 403 404 500} status)
@@ -70,7 +71,7 @@
   "Given a clj-http request, and a 'next' url string, merge the next url into the request"
   [req url]
   (let [url-map (url/url url)]
-    (assoc-in req [:query-params] (-> url-map :query))))
+    (assoc-in req [:query-params] (:query url-map))))
 
 (defn no-content?
   "Takes a response and returns true if it is a 204 response, false otherwise."
@@ -80,32 +81,36 @@
   "Creates a URL out of end-point and positional. Called URLEncoder/encode on
    the elements of positional and then formats them in."
   [end-point positional]
-  (str url (apply format end-point (map #(URLEncoder/encode (str %) "UTF-8") positional))))
+  (str url (apply format end-point (map url/url-encode positional))))
 
 (defn make-request [method end-point positional
-                    {:strs [auth throw_exceptions follow_redirects accept
-                            oauth_token etag if_modified_since user_agent]
-                     :or {follow_redirects true throw_exceptions false}
+                    {:keys [auth throw-exceptions follow-redirects accept
+                            oauth-token etag if-modified-since user-agent
+                            otp]
+                     :or {follow-redirects true throw-exceptions false}
                      :as query}]
   (let [req (merge-with merge
                         {:url (format-url end-point positional)
                          :basic-auth auth
-                         :throw-exceptions throw_exceptions
-                         :follow-redirects follow_redirects
+                         :throw-exceptions throw-exceptions
+                         :follow-redirects follow-redirects
                          :method method}
                         (when accept
                           {:headers {"Accept" accept}})
-                        (when oauth_token
-                          {:headers {"Authorization" (str "token " oauth_token)}})
+                        (when oauth-token
+                          {:headers {"Authorization" (str "token " oauth-token)}})
                         (when etag
                           {:headers {"if-None-Match" etag}})
-                        (when user_agent
-                          {:headers {"User-Agent" user_agent}})
-                        (when if_modified_since
-                          {:headers {"if-Modified-Since" if_modified_since}}))
-        proper-query (dissoc query "auth" "oauth_token" "all_pages" "accept" "user_agent")
+                        (when user-agent
+                          {:headers {"User-Agent" user-agent}})
+                        (when otp
+                          {:headers {"X-GitHub-OTP" otp}})
+                        (when if-modified-since
+                          {:headers {"if-Modified-Since" if-modified-since}}))
+        raw-query (:raw query)
+        proper-query (query-map (dissoc query :auth :oauth-token :all-pages :accept :user-agent :otp))
         req (if (#{:post :put :delete} method)
-              (assoc req :body (json/generate-string (or (proper-query "raw") proper-query)))
+              (assoc req :body (json/generate-string (or raw-query proper-query)))
               (assoc req :query-params proper-query))]
     req))
 
@@ -113,8 +118,8 @@
   ([method end-point] (api-call method end-point nil nil))
   ([method end-point positional] (api-call method end-point positional nil))
   ([method end-point positional query]
-     (let [query (query-map query)
-           all-pages? (query "all_pages")
+     (let [query (or query {})
+           all-pages? (query :all-pages)
            req (make-request method end-point positional query)
            exec-request-one (fn exec-request-one [req]
                               (safe-parse (http/request req)))
@@ -130,8 +135,8 @@
   ([method end-point] (raw-api-call method end-point nil nil))
   ([method end-point positional] (raw-api-call method end-point positional nil))
   ([method end-point positional query]
-     (let [query (query-map query)
-           all-pages? (query "all_pages")
+     (let [query (or query {})
+           all-pages? (query :all-pages)
            req (make-request method end-point positional query)]
        (http/request req))))
 
